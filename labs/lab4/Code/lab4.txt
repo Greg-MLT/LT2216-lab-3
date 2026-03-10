@@ -1,0 +1,37 @@
+Reference: Leonard Cohen – "Avalanche" (1971)
+Part B – VG attempt: SSML styling used to approximate the pacing of the original performance.
+
+<speak xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml" version="1.0" xml:lang="en-CA"><voice name="en-CA-LiamNeural">
+
+<mstts:express-as style="serious">
+
+<prosody rate="slow" pitch="-6%">Well I stepped into an avalanche
+</prosody>
+
+<break time="60ms" />
+
+<prosody rate="slow" pitch="-6%">It covered up my soul
+</prosody>
+
+<break time="700ms" />
+
+<prosody rate="slow" pitch="-6%">When I am not this hunchback that you see
+</prosody>
+
+<break time="60ms" />
+
+<prosody rate="slow" pitch="-6%">I sleep beneath the golden hill
+</prosody>
+
+<break time="700ms" />
+
+<prosody rate="slow" pitch="-6%">You who wish to conquer pain
+</prosody>
+
+<break time="60ms" />
+
+<prosody rate="slow" pitch="-6%">You must learn, learn to serve me well.
+</prosody>
+</mstts:express-as>
+
+</voice></speak>
