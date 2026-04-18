@@ -1,2 +1,2 @@
-export const KEY = "SPEECH_KEY_HERE";
-export const NLU_KEY = "LANGUAGE_KEY_HERE";
+export const KEY = "YOUR_KEY_HERE";
+export const NLU_KEY = "YOUR_NLU_KEY_HERE";

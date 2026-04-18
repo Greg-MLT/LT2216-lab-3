@@ -22,7 +22,7 @@ export interface NLUObject {
 }
 
 export interface DMContext {
-  spstRef: ActorRef<any, any>;
+  ssRef: ActorRef<any, any>;
   lastResult: Hypothesis[] | null;
   interpretation: NLUObject | null;
   person: string | null;

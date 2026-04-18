@@ -1,9 +1,6 @@
-// NOTE: While I attempted to complete all of the steps described in the task, 
-// I struggled to employ the use of the CLU service due to an apparent security issue.
-// Direct browser calls to the Azure Language API seem to be blocked
-// by CORS in the current Azure configuration - as far as I can tell -
-// so the dialogue system falls back to the Lab 3 grammar 
-// while logging the attempted NLU result.
+/*
+NOTE: updated version (18 April 2026)
+*/
 
 import { assign, createActor, setup } from "xstate";
 import type { Settings } from "speechstate";
@@ -16,19 +13,12 @@ const inspector = createBrowserInspector();
 
 const azureCredentials = {
   endpoint:
-    "https://norwayeast.api.cognitive.microsoft.com/sts/v1.0/issuetoken",
+    "https://switzerlandnorth.api.cognitive.microsoft.com/sts/v1.0/issuetoken",
   key: KEY,
 };
 
-// NOTE: While I attempted to complete all of the steps described in the task, 
-// I struggled to employ the use of the CLU service due to an apparent security issue.
-// Direct browser calls to the Azure Language API seem to be blocked
-// by CORS in the current Azure configuration - as far as I can tell -
-// so the dialogue system falls back to the Lab 3 grammar 
-// while logging the attempted NLU result.
-
 const azureLanguageCredentials = {
-  endpoint: "https://language-resource-sougr.cognitiveservices.azure.com/",
+  endpoint: "https://language-resource-sougr.cognitiveservices.azure.com/language/:analyze-conversations?api-version=2024-11-15-preview",
   key: NLU_KEY,
   deploymentName: "appointment",
   projectName: "appointment",
@@ -37,74 +27,25 @@ const azureLanguageCredentials = {
 const settings: Settings = {
   azureLanguageCredentials: azureLanguageCredentials,
   azureCredentials: azureCredentials,
-  azureRegion: "norwayeast",
+  azureRegion: "switzerlandnorth",
   asrDefaultCompleteTimeout: 0,
   asrDefaultNoInputTimeout: 5000,
   locale: "en-US",
   ttsDefaultVoice: "en-US-DavisNeural",
 };
 
-interface GrammarEntry {
-  person?: string;
-  day?: string;
-  time?: string;
-  confirm?: boolean;
-}
-
-const grammar: { [index: string]: GrammarEntry } = {
-  vlad: { person: "Vladislav Maraev" },
-  bora: { person: "Bora Kara" },
-  tal: { person: "Talha Bedir" },
-  tom: { person: "Tom Södahl Bladsjö" },
-  greg: { person: "Greg Soulliere" },
-  nobody: { person: "nobody" },
-  "no one": { person: "no one" },
-  anyone: { person: "anyone" },
-  monday: { day: "Monday" },
-  tuesday: { day: "Tuesday" },
-  wednesday: { day: "Wednesday" },
-  thursday: { day: "Thursday" },
-  friday: { day: "Friday" },
-  saturday: { day: "Saturday" },
-  sunday: { day: "Sunday" },
-  "9": { time: "9:00" },
-  "10": { time: "10:00" },
-  "11": { time: "11:00" },
-  "12": { time: "12:00" },
-  "13": { time: "13:00" },
-  "1": { time: "1:00 pm" },
-  "14": { time: "14:00" },
-  "2": { time: "2:00 pm" },
-  "15": { time: "15:00" },
-  "3": {time: "3:00 pm" },
-  "16": { time: "16:00" },
-  "4": { time: "4:00 pm" },
-  yes: { confirm: true },
-  totally: { confirm: true },
-  "of course": { confirm: true },
-  sure: { confirm: true },
-  yeah: { confirm: true },
-  yep: { confirm: true },
-  yup: { confirm: true },
-  no: { confirm: false },
-  "no way": { confirm: false },
-  nope: { confirm: false },
-  nah: { confirm: false },
-  "uh uh": { confirm: false },
-  "no wait": { confirm: false },
-};
-
-function getPerson(utterance: string) {
-  return (grammar[utterance.toLowerCase()] || {}).person;
-}
-function getDay(utterance: string) {
-  return (grammar[utterance.toLowerCase()] || {}).day;
-}
-function getTime(utterance: string) {
-  return (grammar[utterance.toLowerCase()] || {}).time;
-}
 function getConfirm(utterance: string): boolean | undefined {
-  return (grammar[utterance.toLowerCase()] || {}).confirm;
+  const u = utterance.toLowerCase();
+
+  if (["yes", "totally", "of course", "sure", "yeah", "yep", "yup"].includes(u)) {
+    return true;
+  }
+
+  if (["no", "no way", "nope", "nah", "uh uh", "no wait"].includes(u)) {
+    return false;
+  }
+
+  return undefined;
 }
 
 const dmMachine = setup({
@@ -114,20 +55,20 @@ const dmMachine = setup({
   },
   actions: {
     "spst.speak": ({ context }, params: { utterance: string }) =>
-      context.spstRef.send({
+      context.ssRef.send({
         type: "SPEAK",
         value: { utterance: params.utterance },
       }),
 
     "spst.listen": ({ context }) =>
-      context.spstRef.send({
+      context.ssRef.send({
         type: "LISTEN",
         value: { nlu: true },
       }),
   },
 }).createMachine({
   context: ({ spawn }) => ({
-    spstRef: spawn(speechstate, { input: settings }),
+    ssRef: spawn(speechstate, { input: settings }),
     lastResult: null,
     interpretation: null,
     person: null,
@@ -141,7 +82,7 @@ const dmMachine = setup({
   initial: "Prepare",
   states: {
     Prepare: {
-      entry: ({ context }) => context.spstRef.send({ type: "PREPARE" }),
+      entry: ({ context }) => context.ssRef.send({ type: "PREPARE" }),
       on: { ASRTTS_READY: "WaitToStart" },
     },
     WaitToStart: {
@@ -207,12 +148,18 @@ const dmMachine = setup({
               {
                 target: "#DM.Appointment.AskDay",
                 guard: ({ context }) => {
-                  const utterance = context.lastResult?.[0]?.utterance;
-                  return !!(utterance && getPerson(utterance));
+                  const intent = context.interpretation?.topIntent;
+                  return intent === "who is X" || intent === "create a meeting";
                 },
                 actions: assign(({ context }) => {
-                  const utterance = context.lastResult?.[0]?.utterance;
-                  return { person: getPerson(utterance!) ?? null };
+                  const entityPerson =
+                    context.interpretation?.entities?.find(e =>
+                      e.category.toLowerCase().includes("person")
+                    );
+
+                  return {
+                    person: entityPerson?.text ?? null
+                  };
                 }),
               },
             ],
@@ -230,12 +177,11 @@ const dmMachine = setup({
               on: {
                 RECOGNISED: {
                   actions: assign(({ event }) => {
-  console.log("NLU RESULT:", event.nluValue);
-  return {
-    lastResult: event.value,
-    interpretation: event.nluValue
-  };
-}),
+                    return {
+                      lastResult: event.value,
+                      interpretation: event.nluValue
+                    };
+                  }),
                 },
                 ASR_NOINPUT: {
                   actions: assign({ lastResult: null }),
@@ -252,12 +198,22 @@ const dmMachine = setup({
               {
                 target: "#DM.Appointment.AskWholeDay",
                 guard: ({ context }) => {
-                  const utterance = context.lastResult?.[0]?.utterance;
-                  return !!(utterance && getDay(utterance));
+                  const entityDay =
+                    context.interpretation?.entities?.find(e =>
+                      e.category.toLowerCase().includes("day")
+                    );
+
+                  return !!entityDay;
                 },
                 actions: assign(({ context }) => {
-                  const utterance = context.lastResult?.[0]?.utterance;
-                  return { day: getDay(utterance!) ?? null };
+                  const entityDay =
+                    context.interpretation?.entities?.find(e =>
+                      e.category.toLowerCase().includes("day")
+                    );
+
+                  return {
+                    day: entityDay?.text ?? null
+                  };
                 }),
               },
             ],
@@ -274,13 +230,10 @@ const dmMachine = setup({
               entry: { type: "spst.listen" },
               on: {
                 RECOGNISED: {
-                  actions: assign(({ event }) => {
-  console.log("NLU RESULT:", event.nluValue);
-  return {
-    lastResult: event.value,
-    interpretation: event.nluValue
-  };
-}),
+                  actions: assign(({ event }) => ({
+                    lastResult: event.value,
+                    interpretation: event.nluValue
+                  })),
                 },
                 ASR_NOINPUT: {
                   actions: assign({ lastResult: null }),
@@ -327,13 +280,10 @@ const dmMachine = setup({
               entry: { type: "spst.listen" },
               on: {
                 RECOGNISED: {
-                  actions: assign(({ event }) => {
-  console.log("NLU RESULT:", event.nluValue);
-  return {
-    lastResult: event.value,
-    interpretation: event.nluValue
-  };
-}),
+                  actions: assign(({ event }) => ({
+                    lastResult: event.value,
+                    interpretation: event.nluValue
+                  })),
                 },
                 ASR_NOINPUT: {
                   actions: assign({ lastResult: null }),
@@ -351,12 +301,22 @@ const dmMachine = setup({
               {
                 target: "#DM.Appointment.ConfirmWithTime",
                 guard: ({ context }) => {
-                  const utterance = context.lastResult?.[0]?.utterance;
-                  return !!(utterance && getTime(utterance));
+                  const entityTime =
+                    context.interpretation?.entities?.find(e =>
+                      e.category.toLowerCase().includes("time")
+                    );
+
+                  return !!entityTime;
                 },
                 actions: assign(({ context }) => {
-                  const utterance = context.lastResult?.[0]?.utterance;
-                  return { time: getTime(utterance!) ?? null };
+                  const entityTime =
+                    context.interpretation?.entities?.find(e =>
+                      e.category.toLowerCase().includes("time")
+                    );
+
+                  return {
+                    time: entityTime?.text ?? null
+                  };
                 }),
               },
             ],
@@ -373,13 +333,10 @@ const dmMachine = setup({
               entry: { type: "spst.listen" },
               on: {
                 RECOGNISED: {
-                  actions: assign(({ event }) => {
-  console.log("NLU RESULT:", event.nluValue);
-  return {
-    lastResult: event.value,
-    interpretation: event.nluValue
-  };
-}),
+                  actions: assign(({ event }) => ({
+                    lastResult: event.value,
+                    interpretation: event.nluValue
+                  })),
                 },
                 ASR_NOINPUT: {
                   actions: assign({ lastResult: null }),
@@ -424,13 +381,10 @@ const dmMachine = setup({
               entry: { type: "spst.listen" },
               on: {
                 RECOGNISED: {
-                  actions: assign(({ event }) => {
-  console.log("NLU RESULT:", event.nluValue);
-  return {
-    lastResult: event.value,
-    interpretation: event.nluValue
-  };
-}),
+                  actions: assign(({ event }) => ({
+                    lastResult: event.value,
+                    interpretation: event.nluValue
+                  })),
                 },
                 ASR_NOINPUT: {
                   actions: assign({ lastResult: null }),
@@ -477,13 +431,10 @@ const dmMachine = setup({
               entry: { type: "spst.listen" },
               on: {
                 RECOGNISED: {
-                  actions: assign(({ event }) => {
-  console.log("NLU RESULT:", event.nluValue);
-  return {
-    lastResult: event.value,
-    interpretation: event.nluValue
-  };
-}),
+                  actions: assign(({ event }) => ({
+                    lastResult: event.value,
+                    interpretation: event.nluValue
+                  })),
                 },
                 ASR_NOINPUT: {
                   actions: assign({ lastResult: null }),
@@ -511,20 +462,13 @@ const dmActor = createActor(dmMachine, {
   inspect: inspector.inspect,
 }).start();
 
-dmActor.subscribe((state) => {
-  console.group("State update");
-  console.log("State value:", state.value);
-  console.log("State context:", state.context);
-  console.groupEnd();
-});
-
 export function setupButton(element: HTMLButtonElement) {
   element.addEventListener("click", () => {
     dmActor.send({ type: "CLICK" });
   });
   dmActor.subscribe((snapshot) => {
     const meta: { view?: string } =
-      Object.values(snapshot.context.spstRef.getSnapshot().getMeta())[0] || {
+      Object.values(snapshot.context.ssRef.getSnapshot().getMeta())[0] || {
         view: undefined,
       };
     element.innerHTML = `${meta.view}`;
